@@ -153,7 +153,8 @@ def main():
         # 3. update stage
         logger.info('--------------------- report stage ---------------------')
         # 3.1 update global model
-        server.update_model(cfg.update_frac)
+        # server.update_model(cfg.update_frac)
+        server.update_gradient(cfg.update_frac)
         
         # 3.2 total simulation time for this round
         logger.info("simulating round {} used {} seconds".format(i+1, time.time()-round_start_time))

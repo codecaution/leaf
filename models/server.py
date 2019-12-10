@@ -1,5 +1,6 @@
 import numpy as np
 import timeout_decorator
+from gradientCompression import SignSGD
 import traceback
 from utils.logger import Logger
 
@@ -9,10 +10,10 @@ L = Logger()
 logger = L.get_logger()
 
 class Server:
-    
     def __init__(self, client_model, clients=[]):
         self.client_model = client_model
         self.model = client_model.get_params()
+        self.gradients = None
         self.selected_clients = []
         self.all_clients = clients
         self.updates = []
@@ -63,8 +64,11 @@ class Server:
             c.id: {BYTES_WRITTEN_KEY: 0,
                    BYTES_READ_KEY: 0,
                    LOCAL_COMPUTATIONS_KEY: 0} for c in clients}
+        # for c in self.all_clients:
+        #     c.model.set_params(self.model)
         for c in self.all_clients:
-            c.model.set_params(self.model)
+            if self.gradients is not None:
+                c.model.update_params(self.gradients)
         simulate_time = 0
         for c in clients:
             # c.model.set_params(self.model)
@@ -73,16 +77,18 @@ class Server:
                 c.set_deadline(deadline)
                 # training
                 logger.debug('client {} starts training...'.format(c.id))
-                simulate_time_c, comp, num_samples, update_gradients = c.train(num_epochs, batch_size, minibatch)
+                simulate_time_c, comp, num_samples, models, gradients = c.train(num_epochs, batch_size, minibatch)
+                dict_value = c.test()
+                logger.info('client {} simulate_time: {} accuracy: {} loss: {}'.format(c.id, simulate_time_c, dict_value['accuracy'], dict_value['loss']))
                 # !!!!!
-                # compressed_update_gradients, before_compressed_bits, after_compressed_bits = compressed_function(update_gradients)
-                logger.debug('client {} simulate_time: {}'.format(c.id, simulate_time_c))
+                compressed_update_gradients, before_compressed_bits, after_compressed_bits = SignSGD.GradientCompress(gradients)
                 if simulate_time_c > simulate_time:
                     simulate_time = simulate_time_c
                 sys_metrics[c.id][BYTES_READ_KEY] += c.model.size
                 sys_metrics[c.id][BYTES_WRITTEN_KEY] += c.model.size
                 sys_metrics[c.id][LOCAL_COMPUTATIONS_KEY] = comp
                 # uploading 
+                # self.updates.append((c.id, num_samples, models))
                 self.updates.append((c.id, num_samples, compressed_update_gradients))
                 logger.info('client {} upload successfully!'.format(c.id))
             except timeout_decorator.timeout_decorator.TimeoutError as e:
@@ -118,6 +124,28 @@ class Server:
             logger.info('round failed, global model maintained.')
         self.updates = []
 
+    def update_gradient(self, update_frac):
+        logger.info('{} of {} clients upload successfully'.format(len(self.updates), len(self.selected_clients)))
+        if len(self.updates) / len(self.selected_clients) >= update_frac:        
+            logger.info('round succeed, updating global model...')
+            used_client_ids = [cid for (cid, client_samples, client_gradient) in self.updates]
+            total_weight = 0.
+            base = [0] * len(self.updates[0][2])
+            for (cid, client_samples, client_gradient) in self.updates:
+                total_weight += client_samples
+                for i, v in enumerate(client_gradient):
+                    base[i] += (client_samples * v.astype(np.float64))
+            for c in self.all_clients:
+                if c.id not in used_client_ids:
+                    # c was not trained in this round
+                    total_weight += c.num_train_samples  # assume that all train_data is used to update
+
+            averaged_gradient = [grad / total_weight for grad in base]
+            self.gradients = averaged_gradient
+        else:
+            logger.info('round failed, global model maintained.')
+        self.updates = []
+        
     def test_model(self, clients_to_test, set_to_use='test'):
         """Tests self.model on given clients.
 

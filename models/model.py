@@ -52,15 +52,30 @@ class Model(ABC):
     def get_params(self):
         with self.graph.as_default():
             model_params = self.sess.run(tf.trainable_variables())
+        # print("model params:")
+        # # print(type(model_params), model_params[0])
+        # for i in range(len(model_params)):
+        #     print(model_params[i].shape)
         return model_params
     
     def get_gradients(self):
         with self.graph.as_default():
-            gradient_paras = tf.gradients(self.loss, tf.trainable_variables())
-            gradients = self.sess.run(gradient_paras,
-                                        feed_dict={
-                                            self.features: self.last_features,
-                                            self.labels: self.last_labels})
+            # gradient_paras = tf.gradients(self.loss, tf.trainable_variables())
+            # gradients = self.sess.run(gradient_paras,
+            #                             feed_dict={
+            #                                 self.features: self.last_features,
+            #                                 self.labels: self.last_labels})
+            gradients_paras = self.optimizer.compute_gradients(self.loss, tf.trainable_variables())
+            gradients = self.sess.run(gradients_paras,
+                                            feed_dict={
+                                                self.features: self.last_features,
+                                                self.labels: self.last_labels})
+        # print("gradient params:")
+        for i in range(len(gradients)):
+            if i == 0 :
+                gradients[i] = np.array(gradients[0])[1]
+            else:
+                gradients[i] = np.array(gradients[i])
         return gradients
 
     @property
@@ -102,10 +117,10 @@ class Model(ABC):
         for _ in range(num_epochs):
             self.run_epoch(data, batch_size)
 
-        update = self.get_params()
+        models = self.get_params()
         gradients = self.get_gradients()
         comp = num_epochs * (len(data['y'])//batch_size) * batch_size * self.flops
-        return comp, update
+        return comp, models, gradients
 
     def run_epoch(self, data, batch_size):
         for batched_x, batched_y in batch_data(data, batch_size):
