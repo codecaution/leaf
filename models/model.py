@@ -28,7 +28,6 @@ class Model(ABC):
         config=tf.ConfigProto(log_device_placement=False)
         # config.gpu_options.per_process_gpu_memory_fraction = gpu_fraction
         self.sess = tf.Session(graph=self.graph, config=config)
-
         self.size = graph_size(self.graph)
 
         with self.graph.as_default():
@@ -43,11 +42,26 @@ class Model(ABC):
             all_vars = tf.trainable_variables()
             for variable, value in zip(all_vars, model_params):
                 variable.load(value, self.sess)
-
+    
+    def update_params(self, gradient_params):
+        with self.graph.as_default():
+            all_vars = tf.trainable_variables()
+            update_op = self.optimizer.apply_gradients(zip(gradient_params, all_vars))
+            self.sess.run(update_op)
+    
     def get_params(self):
         with self.graph.as_default():
             model_params = self.sess.run(tf.trainable_variables())
         return model_params
+    
+    def get_gradients(self):
+        with self.graph.as_default():
+            gradient_paras = tf.gradients(self.loss, tf.trainable_variables())
+            gradients = self.sess.run(gradient_paras,
+                                        feed_dict={
+                                            self.features: self.last_features,
+                                            self.labels: self.last_labels})
+        return gradients
 
     @property
     def optimizer(self):
@@ -89,6 +103,7 @@ class Model(ABC):
             self.run_epoch(data, batch_size)
 
         update = self.get_params()
+        gradients = self.get_gradients()
         comp = num_epochs * (len(data['y'])//batch_size) * batch_size * self.flops
         return comp, update
 
@@ -98,6 +113,8 @@ class Model(ABC):
             input_data = self.process_x(batched_x)
             target_data = self.process_y(batched_y)
             
+            self.last_features = input_data
+            self.last_labels = target_data
             with self.graph.as_default():
                 self.sess.run(self.train_op,
                     feed_dict={

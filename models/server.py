@@ -73,7 +73,9 @@ class Server:
                 c.set_deadline(deadline)
                 # training
                 logger.debug('client {} starts training...'.format(c.id))
-                simulate_time_c, comp, num_samples, update = c.train(num_epochs, batch_size, minibatch)
+                simulate_time_c, comp, num_samples, update_gradients = c.train(num_epochs, batch_size, minibatch)
+                # !!!!!
+                # compressed_update_gradients, before_compressed_bits, after_compressed_bits = compressed_function(update_gradients)
                 logger.debug('client {} simulate_time: {}'.format(c.id, simulate_time_c))
                 if simulate_time_c > simulate_time:
                     simulate_time = simulate_time_c
@@ -81,7 +83,7 @@ class Server:
                 sys_metrics[c.id][BYTES_WRITTEN_KEY] += c.model.size
                 sys_metrics[c.id][LOCAL_COMPUTATIONS_KEY] = comp
                 # uploading 
-                self.updates.append((c.id, num_samples, update))
+                self.updates.append((c.id, num_samples, compressed_update_gradients))
                 logger.info('client {} upload successfully!'.format(c.id))
             except timeout_decorator.timeout_decorator.TimeoutError as e:
                 logger.info('client {} failed: timeout!'.format(c.id))
