@@ -44,10 +44,13 @@ class Model(ABC):
                 variable.load(value, self.sess)
     
     def update_params(self, gradient_params):
+        # print(gradient_params)
         with self.graph.as_default():
-            all_vars = tf.trainable_variables()
+            all_vars = tf.trainable_variables()[1:]
             update_op = self.optimizer.apply_gradients(zip(gradient_params, all_vars))
             self.sess.run(update_op)
+            model_params = self.sess.run(tf.trainable_variables())
+        return model_params
     
     def get_params(self):
         with self.graph.as_default():
@@ -56,26 +59,23 @@ class Model(ABC):
         # # print(type(model_params), model_params[0])
         # for i in range(len(model_params)):
         #     print(model_params[i].shape)
+        # print(model_params[0][0])
         return model_params
     
     def get_gradients(self):
         with self.graph.as_default():
-            # gradient_paras = tf.gradients(self.loss, tf.trainable_variables())
-            # gradients = self.sess.run(gradient_paras,
-            #                             feed_dict={
-            #                                 self.features: self.last_features,
-            #                                 self.labels: self.last_labels})
-            gradients_paras = self.optimizer.compute_gradients(self.loss, tf.trainable_variables())
-            gradients = self.sess.run(gradients_paras,
-                                            feed_dict={
-                                                self.features: self.last_features,
-                                                self.labels: self.last_labels})
-        # print("gradient params:")
-        for i in range(len(gradients)):
-            if i == 0 :
-                gradients[i] = np.array(gradients[0])[1]
-            else:
-                gradients[i] = np.array(gradients[i])
+            gradient_paras = tf.gradients(self.loss, tf.trainable_variables()[1:])
+            gradients = self.sess.run(gradient_paras,
+                                        feed_dict={
+                                            self.features: self.last_features,
+                                            self.labels: self.last_labels})
+            # gradients_paras = self.optimizer.compute_gradients(self.loss, tf.trainable_variables())
+            # gradients = self.sess.run(gradients_paras,
+            #                                 feed_dict={
+            #                                     self.features: self.last_features,
+            #                                     self.labels: self.last_labels})
+
+        # print(output_gradients)
         return gradients
 
     @property

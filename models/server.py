@@ -64,11 +64,11 @@ class Server:
             c.id: {BYTES_WRITTEN_KEY: 0,
                    BYTES_READ_KEY: 0,
                    LOCAL_COMPUTATIONS_KEY: 0} for c in clients}
-        # for c in self.all_clients:
-        #     c.model.set_params(self.model)
         for c in self.all_clients:
-            if self.gradients is not None:
-                c.model.update_params(self.gradients)
+            c.model.set_params(self.model)
+        # for c in self.all_clients:
+        #     if self.gradients is not None:
+        #         c.model.update_params(self.gradients)
         simulate_time = 0
         for c in clients:
             # c.model.set_params(self.model)
@@ -110,14 +110,14 @@ class Server:
             for (cid, client_samples, client_model) in self.updates:
                 total_weight += client_samples
                 for i, v in enumerate(client_model):
-                    base[i] += (client_samples * v.astype(np.float64))
+                    base[i] += (client_samples * v.astype(np.float32))
             for c in self.all_clients:
                 if c.id not in used_client_ids:
                     # c was not trained in this round
                     params = c.model.get_params()
                     total_weight += c.num_train_samples  # assume that all train_data is used to update
                     for i, v in enumerate(params):
-                        base[i] += (c.num_train_samples * v.astype(np.float64))
+                        base[i] += (c.num_train_samples * v.astype(np.float32))
             averaged_soln = [v / total_weight for v in base]
             self.model = averaged_soln
         else:
@@ -134,7 +134,7 @@ class Server:
             for (cid, client_samples, client_gradient) in self.updates:
                 total_weight += client_samples
                 for i, v in enumerate(client_gradient):
-                    base[i] += (client_samples * v.astype(np.float64))
+                    base[i] += (client_samples * v.astype(np.float32))
             for c in self.all_clients:
                 if c.id not in used_client_ids:
                     # c was not trained in this round
@@ -142,6 +142,7 @@ class Server:
 
             averaged_gradient = [grad / total_weight for grad in base]
             self.gradients = averaged_gradient
+            self.model = self.client_model.update_params(self.gradients)
         else:
             logger.info('round failed, global model maintained.')
         self.updates = []
