@@ -64,14 +64,14 @@ class Server:
             c.id: {BYTES_WRITTEN_KEY: 0,
                    BYTES_READ_KEY: 0,
                    LOCAL_COMPUTATIONS_KEY: 0} for c in clients}
-        for c in self.all_clients:
-            c.model.set_params(self.model)
+        # for c in self.all_clients:
+        #     c.model.set_params(self.model)
         # for c in self.all_clients:
         #     if self.gradients is not None:
         #         c.model.update_params(self.gradients)
         simulate_time = 0
         for c in clients:
-            # c.model.set_params(self.model)
+            c.model.set_params(self.model)
             try:
                 # set deadline 
                 c.set_deadline(deadline)
@@ -80,8 +80,11 @@ class Server:
                 simulate_time_c, comp, num_samples, models, gradients = c.train(num_epochs, batch_size, minibatch)
                 dict_value = c.test()
                 logger.info('client {} simulate_time: {} accuracy: {} loss: {}'.format(c.id, simulate_time_c, dict_value['accuracy'], dict_value['loss']))
-                # !!!!!
-                compressed_update_gradients, before_compressed_bits, after_compressed_bits = SignSGD.GradientCompress(gradients)
+                # if Change gradient compressed method 
+                # Modify here
+                # self.gradients = averaged_gradient
+                compressed_update_gradients, before_compressed_bits, after_compressed_bits = SignSGD.SignSGDUpdate.GradientCompress(gradients)
+                # compressed_update_gradients, before_compressed_bits, after_compressed_bits = SignSGD.SigumSGDUpdate.GradientCompress(gradients)
                 if simulate_time_c > simulate_time:
                     simulate_time = simulate_time_c
                 sys_metrics[c.id][BYTES_READ_KEY] += c.model.size
@@ -141,7 +144,11 @@ class Server:
                     total_weight += c.num_train_samples  # assume that all train_data is used to update
 
             averaged_gradient = [grad / total_weight for grad in base]
-            self.gradients = averaged_gradient
+            # if Change gradient compressed method 
+            # Modify here
+            # self.gradients = averaged_gradient
+            self.gradients = SignSGD.SignSGDUpdate.MajorityVote(averaged_gradient)
+            self.client_model.set_params(self.model)
             self.model = self.client_model.update_params(self.gradients)
         else:
             logger.info('round failed, global model maintained.')
